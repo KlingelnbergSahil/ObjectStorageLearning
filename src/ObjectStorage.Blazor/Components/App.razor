@@ -63,6 +63,29 @@
 
                 return { fileName: file.name, size: file.size };
             },
+            uploadPbmBundleToApi: async (inputId, url, backupName) => {
+                const input = document.getElementById(inputId);
+                if (!input || !input.files || input.files.length === 0) {
+                    throw new Error('Choose a PBM bundle file first.');
+                }
+
+                const file = input.files[0];
+                const formData = new FormData();
+                formData.append('File', file, file.name);
+                formData.append('BackupName', backupName);
+
+                const response = await fetch(url, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const body = await response.text();
+                if (!response.ok) {
+                    throw new Error(body || `Upload failed with HTTP ${response.status}`);
+                }
+
+                return body;
+            },
             openUrl: url => window.open(url, '_blank', 'noopener,noreferrer')
         };
     </script>

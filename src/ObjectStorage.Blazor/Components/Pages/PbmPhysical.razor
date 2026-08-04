@@ -37,6 +37,14 @@
     <MudTabPanel Text="Restore">
         <MudPaper Class="pa-4 mt-4" Outlined="true">
             <MudText Typo="Typo.h6">Restore</MudText>
+            <MudText Typo="Typo.subtitle2" Class="mt-2">Upload Downloaded PBM Bundle</MudText>
+            <MudTextField @bind-Value="_uploadBundleBackupName" Label="PBM Snapshot Name For Uploaded Bundle" Placeholder="2026-08-04T06:03:36Z" Margin="Margin.Dense" />
+            <InputFile id="@BundleInputId" OnChange="OnBundleSelected" />
+            <MudButton Class="mt-2" Variant="Variant.Filled" Color="Color.Primary" OnClick="UploadBundleAsync" Disabled="_busy || string.IsNullOrWhiteSpace(_uploadBundleBackupName)">
+                Upload Bundle And Resync
+            </MudButton>
+
+            <MudDivider Class="my-4" />
             <MudTextField @bind-Value="_backupName" Label="PBM Snapshot Name" Placeholder="Select from table or paste name" Margin="Margin.Dense" />
             <MudCheckBox @bind-Value="_dropExistingBeforeRestore" Label="Drop database before restore" />
             <MudTextField @bind-Value="_databaseNameToDrop" Label="Database To Drop" Margin="Margin.Dense" Disabled="!_dropExistingBeforeRestore" />
@@ -58,8 +66,11 @@
 
 @code {
     private const BackupStrategy Strategy = BackupStrategy.PbmPhysical;
+    private const string BundleInputId = "pbmPhysicalBundleInput";
     private bool _busy;
     private string? _backupName;
+    private string? _uploadBundleBackupName;
+    private string? _selectedBundleFileName;
     private bool _dropExistingBeforeRestore;
     private string _databaseNameToDrop = "R300";
     private string? _output;
@@ -166,6 +177,28 @@
             _output = CombineSections(("Restore submit", Format(restore)), ("Status", Format(status)), ("Agent logs", Format(logs)));
         });
 
+    private void OnBundleSelected(InputFileChangeEventArgs args)
+    {
+        _selectedBundleFileName = args.File.Name;
+        _uploadBundleBackupName ??= InferBackupNameFromBundleFileName(_selectedBundleFileName);
+    }
+
+    private async Task UploadBundleAsync() =>
+        await RunAsync("Upload PBM physical bundle", async () =>
+        {
+            string uploadOutput =
+                await Js.InvokeAsync<string>(
+                    "backupPoc.uploadPbmBundleToApi",
+                    BundleInputId,
+                    Api.CreatePbmSnapshotBundleUploadUri().ToString(),
+                    _uploadBundleBackupName);
+
+            await LoadSnapshotsAsync();
+            _backupName = _uploadBundleBackupName;
+            _output =
+                $"{uploadOutput}{Environment.NewLine}{Environment.NewLine}{_output}";
+        });
+
     private Task SelectSnapshot(string backupName)
     {
         _backupName = backupName;
@@ -267,6 +300,22 @@
 
         Match match = Regex.Match(output, "Snapshot backup \"(?<name>[^\"]+)\"");
         return match.Success ? match.Groups["name"].Value : null;
+    }
+
+    private static string InferBackupNameFromBundleFileName(string fileName)
+    {
+        string name =
+            Path.GetFileName(fileName);
+
+        const string pbmBundleSuffix = ".pbm-snapshot.zip";
+        if (name.EndsWith(pbmBundleSuffix, StringComparison.OrdinalIgnoreCase))
+        {
+            return name[..^pbmBundleSuffix.Length];
+        }
+
+        return name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
+            ? name[..^4]
+            : name;
     }
 
     private static bool IsCompleted(string? backupName, string? statusOutput, string? listOutput)

@@ -89,15 +89,32 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-await EnsureDefaultContainerAsync(app);
+QueueDefaultContainerEnsure(app);
 
 app.Run();
 
-static async Task EnsureDefaultContainerAsync(
+static void QueueDefaultContainerEnsure(
     WebApplication application)
 {
+    application.Lifetime.ApplicationStarted.Register(
+        () =>
+        {
+            _ = Task.Run(
+                async () =>
+                    await EnsureDefaultContainerAsync(
+                        application.Services,
+                        application.Configuration,
+                        application.Lifetime.ApplicationStopping));
+        });
+}
+
+static async Task EnsureDefaultContainerAsync(
+    IServiceProvider services,
+    IConfiguration configuration,
+    CancellationToken cancellationToken)
+{
     using IServiceScope scope =
-        application.Services.CreateScope();
+        services.CreateScope();
 
     ILogger logger =
         scope.ServiceProvider
@@ -109,33 +126,58 @@ static async Task EnsureDefaultContainerAsync(
             .GetRequiredService<IObjectStorageProvider>();
 
     string defaultContainer =
-        application.Configuration[
+        configuration[
             "ObjectStorage:DefaultContainer"]
         ?? throw new InvalidOperationException(
             "ObjectStorage:DefaultContainer is missing.");
 
-    for (int attempt = 1; attempt <= 30; attempt++)
+    for (int attempt = 1; attempt <= 120; attempt++)
     {
         try
         {
             await storage.EnsureContainerExistsAsync(
-                defaultContainer);
+                defaultContainer,
+                cancellationToken);
 
+            logger.LogInformation(
+                "Default storage container {Container} is ready.",
+                defaultContainer);
             return;
         }
-        catch (Exception exception) when (attempt < 30)
+        catch (OperationCanceledException)
+            when (cancellationToken.IsCancellationRequested)
         {
+            return;
+        }
+        catch (Exception exception)
+        {
+            if (attempt == 120)
+            {
+                logger.LogError(
+                    exception,
+                    "Could not ensure default storage container {Container} after {Attempts} attempts.",
+                    defaultContainer,
+                    attempt);
+                return;
+            }
+
             logger.LogWarning(
                 exception,
                 "Could not ensure default storage container {Container} on attempt {Attempt}. Retrying.",
                 defaultContainer,
                 attempt);
 
-            await Task.Delay(
-                TimeSpan.FromSeconds(2));
+            try
+            {
+                await Task.Delay(
+                    TimeSpan.FromSeconds(5),
+                    cancellationToken);
+            }
+            catch (OperationCanceledException)
+                when (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
         }
     }
-
-    await storage.EnsureContainerExistsAsync(
-        defaultContainer);
 }

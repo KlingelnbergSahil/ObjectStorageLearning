@@ -221,14 +221,15 @@ Run:
 4. Click Refresh Snapshots if the completed snapshot table has not refreshed yet.
 5. Click Download Bundle on the completed snapshot when you want to test PBM backup download throughput.
 6. Open the Restore tab.
-7. Click Refresh Snapshots.
-8. Select one completed snapshot from the table.
-9. To test a clean restore, check `Drop database before restore` and keep `Database To Drop` as `R300`, or change it to the database you restored into the POC Mongo container.
-10. Click Restore Selected Snapshot.
+7. To test upload speed with a downloaded PBM bundle, choose the `.pbm-snapshot.zip` file, confirm the PBM Snapshot Name, and click Upload Bundle And Resync.
+8. Click Refresh Snapshots.
+9. Select one completed snapshot from the table.
+10. To test a clean restore, check `Drop database before restore` and keep `Database To Drop` as `R300`, or change it to the database you restored into the POC Mongo container.
+11. Click Restore Selected Snapshot.
 
 PBM backup submission can return quickly, but the actual backup continues inside `pbm-agent`. The Blazor page records the full duration only after PBM status/list show that the snapshot finished.
 
-PBM snapshots are stored as multiple S3 objects under the PBM prefix, not as one archive file. The POC download action streams that prefix as a ZIP bundle so download speed can still be tested from the UI. PBM restore itself still uses the snapshot already stored in S3.
+PBM snapshots are stored as multiple S3 objects under the PBM prefix, not as one archive file. The POC download action streams that prefix as a ZIP bundle so download speed can still be tested from the UI. The upload action extracts that ZIP back to the PBM S3 prefix and runs PBM resync so the uploaded snapshot can be selected for restore.
 
 ### Blazor PBM Physical Page
 
@@ -246,10 +247,11 @@ Run:
 4. Click Refresh Snapshots if the completed snapshot table has not refreshed yet.
 5. Click Download Bundle on the completed snapshot when you want to test PBM backup download throughput.
 6. Open the Restore tab.
-7. Click Refresh Snapshots.
-8. Select one completed snapshot from the table.
-9. To test a clean restore, check `Drop database before restore` and keep `Database To Drop` as `R300`, or change it to the database you restored into the POC Mongo container.
-10. Click Restore Selected Snapshot.
+7. To test upload speed with a downloaded PBM bundle, choose the `.pbm-snapshot.zip` file, confirm the PBM Snapshot Name, and click Upload Bundle And Resync.
+8. Click Refresh Snapshots.
+9. Select one completed snapshot from the table.
+10. To test a clean restore, check `Drop database before restore` and keep `Database To Drop` as `R300`, or change it to the database you restored into the POC Mongo container.
+11. Click Restore Selected Snapshot.
 
 PBM physical backup also uses PBM snapshot names, not single mongodump archive files. Restore from a PBM backup by selecting the snapshot name from `pbm list`.
 

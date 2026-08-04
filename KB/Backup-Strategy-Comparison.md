@@ -136,7 +136,7 @@ Tradeoff:
 | 10-15 GB DB | PBM logical and `mongodump` may be in a similar range; exact result depends on data/index/storage. |
 | Very large DB | PBM physical usually has the biggest restore-time advantage. |
 | User file upload/download speed test | `mongodump` archive flow is the cleanest. |
-| PBM snapshot download speed test | Use POC `Download Bundle`, which streams the PBM S3 prefix as a ZIP. |
+| PBM snapshot download/upload speed test | Use POC `Download Bundle`, then Restore tab `Upload Bundle And Resync`. |
 
 For your current restored R300-sized test DB, compare real numbers from the Blazor timing log:
 
@@ -170,8 +170,8 @@ Be careful with:
 | POC page | Flow | What to test |
 |---|---|---|
 | Mongodump | `mongodump` / `mongorestore` | Archive backup, upload, register, download, restore with drop |
-| PBM Logical | PBM logical | PBM snapshot creation, snapshot list, bundle download, restore with optional DB drop |
-| PBM Physical | PBM physical | Physical snapshot creation, bundle download, restore against disposable Percona Mongo |
+| PBM Logical | PBM logical | PBM snapshot creation, snapshot list, bundle download, bundle upload/resync, restore with optional DB drop |
+| PBM Physical | PBM physical | Physical snapshot creation, bundle download, bundle upload/resync, restore against disposable Percona Mongo |
 
 ## Practical Decision
 

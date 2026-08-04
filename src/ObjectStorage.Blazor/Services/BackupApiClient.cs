@@ -215,6 +215,13 @@ public sealed class BackupApiClient
             $"api/backup/pbm/snapshots/{Uri.EscapeDataString(backupName)}/download");
     }
 
+    public Uri CreatePbmSnapshotBundleUploadUri()
+    {
+        return new Uri(
+            _publicBaseAddress,
+            "api/backup/pbm/snapshots/upload-bundle");
+    }
+
     public Uri CreateRecordDownloadUri(
         string recordId)
     {

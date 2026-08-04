@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Microsoft.Net.Http.Headers;
@@ -358,10 +359,7 @@ public sealed class BackupController : ControllerBase
         string backupName,
         CancellationToken cancellationToken)
     {
-        if (backupName.Any(char.IsControl) ||
-            backupName.Contains("..", StringComparison.Ordinal) ||
-            backupName.Contains('/', StringComparison.Ordinal) ||
-            backupName.Contains('\\', StringComparison.Ordinal))
+        if (IsInvalidPbmBackupName(backupName))
         {
             Response.StatusCode = StatusCodes.Status400BadRequest;
             await Response.WriteAsync(
@@ -382,6 +380,84 @@ public sealed class BackupController : ControllerBase
             $"pbm/{backupName}",
             Response.Body,
             cancellationToken);
+    }
+
+    [HttpPost("pbm/snapshots/upload-bundle")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(100L * 1024L * 1024L * 1024L)]
+    public async Task<ActionResult<CommandResultResponse>> UploadPbmSnapshotBundleAsync(
+        [FromForm] UploadPbmSnapshotBundleRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.File.Length == 0)
+        {
+            return BadRequest("The uploaded PBM bundle is empty.");
+        }
+
+        if (IsInvalidPbmBackupName(request.BackupName))
+        {
+            return BadRequest("Invalid PBM backup name.");
+        }
+
+        await _storage.EnsureContainerExistsAsync(
+            _backupOptions.PbmBackupContainer,
+            cancellationToken);
+
+        int uploadedEntries = 0;
+        await using Stream input =
+            request.File.OpenReadStream();
+
+        using var archive =
+            new ZipArchive(
+                input,
+                ZipArchiveMode.Read,
+                leaveOpen: false);
+
+        foreach (ZipArchiveEntry entry in archive.Entries)
+        {
+            string entryName =
+                entry.FullName.Replace('\\', '/');
+
+            if (entry.Length == 0 &&
+                entryName.EndsWith("/", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (IsInvalidBundleEntryName(entryName))
+            {
+                return BadRequest(
+                    $"Invalid PBM bundle entry name: {entry.FullName}");
+            }
+
+            await using Stream entryStream =
+                entry.Open();
+
+            await _storage.UploadAsync(
+                StorageObjectId.Create(
+                    _backupOptions.PbmBackupContainer,
+                    $"pbm/{request.BackupName}/{entryName}"),
+                entryStream,
+                "application/octet-stream",
+                new Dictionary<string, string>
+                {
+                    ["source"] = "user-uploaded-pbm-bundle",
+                    ["original-file-name"] = request.File.FileName
+                },
+                cancellationToken);
+
+            uploadedEntries++;
+        }
+
+        BackupCommandResult resyncResult =
+            await _pbmRunner.ResyncAsync(
+                cancellationToken);
+
+        return new CommandResultResponse(
+            resyncResult.ExitCode,
+            resyncResult.Succeeded,
+            $"Uploaded {uploadedEntries} PBM bundle entries to {_backupOptions.PbmBackupContainer}/pbm/{request.BackupName}.{Environment.NewLine}{resyncResult.StandardOutput}",
+            resyncResult.StandardError);
     }
 
     [HttpPost("pbm/resync")]
@@ -415,6 +491,20 @@ public sealed class BackupController : ControllerBase
 
         return TimeSpan.FromMinutes(expiryMinutes);
     }
+
+    private static bool IsInvalidPbmBackupName(string backupName) =>
+        string.IsNullOrWhiteSpace(backupName) ||
+        backupName.Any(char.IsControl) ||
+        backupName.Contains("..", StringComparison.Ordinal) ||
+        backupName.Contains('/', StringComparison.Ordinal) ||
+        backupName.Contains('\\', StringComparison.Ordinal);
+
+    private static bool IsInvalidBundleEntryName(string entryName) =>
+        string.IsNullOrWhiteSpace(entryName) ||
+        entryName.StartsWith("/", StringComparison.Ordinal) ||
+        entryName.Any(char.IsControl) ||
+        entryName.Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .Any(segment => segment is "." or "..");
 
     private static string SanitizeFileName(string fileName)
     {
