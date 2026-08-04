@@ -207,38 +207,30 @@ public sealed class BackupApiClient
             _jsonOptions);
     }
 
-    public Uri CreatePbmSnapshotDownloadUri(
+    public string CreatePbmSnapshotDownloadUrl(
         string backupName)
     {
-        return new Uri(
-            CreatePublicUrl(
-                $"api/backup/pbm/snapshots/{Uri.EscapeDataString(backupName)}/download"),
-            UriKind.RelativeOrAbsolute);
+        return CreatePublicUrl(
+            $"api/backup/pbm/snapshots/{Uri.EscapeDataString(backupName)}/download");
     }
 
-    public Uri CreatePbmSnapshotBundleUploadUri()
+    public string CreatePbmSnapshotBundleUploadUrl()
     {
-        return new Uri(
-            CreatePublicUrl(
-                "api/backup/pbm/snapshots/upload-bundle"),
-            UriKind.RelativeOrAbsolute);
+        return CreatePublicUrl(
+            "api/backup/pbm/snapshots/upload-bundle");
     }
 
-    public Uri CreateRecordDownloadUri(
+    public string CreateRecordDownloadUrl(
         string recordId)
     {
-        return new Uri(
-            CreatePublicUrl(
-                $"api/backup/records/{Uri.EscapeDataString(recordId)}/download"),
-            UriKind.RelativeOrAbsolute);
+        return CreatePublicUrl(
+            $"api/backup/records/{Uri.EscapeDataString(recordId)}/download");
     }
 
-    public Uri CreateServerUploadUri()
+    public string CreateServerUploadUrl()
     {
-        return new Uri(
-            CreatePublicUrl(
-                "api/storage/server-upload"),
-            UriKind.RelativeOrAbsolute);
+        return CreatePublicUrl(
+            "api/storage/server-upload");
     }
 
     private static async Task<string> ReadCommandBodyAsync(

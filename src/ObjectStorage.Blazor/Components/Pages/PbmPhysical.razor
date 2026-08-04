@@ -190,7 +190,7 @@
                 await Js.InvokeAsync<string>(
                     "backupPoc.uploadPbmBundleToApi",
                     BundleInputId,
-                    Api.CreatePbmSnapshotBundleUploadUri().ToString(),
+                    Api.CreatePbmSnapshotBundleUploadUrl(),
                     _uploadBundleBackupName);
 
             await LoadSnapshotsAsync();
@@ -208,8 +208,9 @@
     private async Task DownloadSnapshotAsync(string backupName) =>
         await RunAsync($"Download PBM bundle {backupName}", async () =>
         {
-            Uri uri = Api.CreatePbmSnapshotDownloadUri(backupName);
-            await Js.InvokeVoidAsync("backupPoc.openUrl", uri.ToString());
+            await Js.InvokeVoidAsync(
+                "backupPoc.openUrl",
+                Api.CreatePbmSnapshotDownloadUrl(backupName));
             _output = $"Started PBM bundle download for {backupName}. Browser download time is shown by the browser; this action only times URL creation/open.";
         });
 

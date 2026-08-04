@@ -185,7 +185,7 @@
             await Js.InvokeAsync<object>(
                 "backupPoc.uploadFileToApi",
                 "backupFileInput",
-                Api.CreateServerUploadUri().ToString(),
+                Api.CreateServerUploadUrl(),
                 _storageContainer,
                 _uploadStorageKey);
 
@@ -208,7 +208,7 @@
         {
             await Js.InvokeVoidAsync(
                 "backupPoc.openUrl",
-                Api.CreateRecordDownloadUri(record.Id).ToString());
+                Api.CreateRecordDownloadUrl(record.Id));
         });
     }
 
