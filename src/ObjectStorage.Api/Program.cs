@@ -123,13 +123,33 @@ app.Use(
             "PBM bundle upload started. ContentLength={ContentLength}",
             context.Request.ContentLength);
 
+        Stream originalResponseBody =
+            context.Response.Body;
+
+        await using var responseCapture =
+            new MemoryStream();
+
+        context.Response.Body =
+            responseCapture;
+
         try
         {
             await next();
 
+            responseCapture.Position = 0;
+            string responseBody =
+                await new StreamReader(responseCapture)
+                    .ReadToEndAsync(context.RequestAborted);
+
+            responseCapture.Position = 0;
+            await responseCapture.CopyToAsync(
+                originalResponseBody,
+                context.RequestAborted);
+
             logger.LogInformation(
-                "PBM bundle upload finished. StatusCode={StatusCode}",
-                context.Response.StatusCode);
+                "PBM bundle upload finished. StatusCode={StatusCode}. Response={Response}",
+                context.Response.StatusCode,
+                responseBody);
         }
         catch (Exception exception)
         {
@@ -137,6 +157,11 @@ app.Use(
                 exception,
                 "PBM bundle upload failed while reading or processing the request.");
             throw;
+        }
+        finally
+        {
+            context.Response.Body =
+                originalResponseBody;
         }
     });
 

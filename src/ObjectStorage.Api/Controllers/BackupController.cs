@@ -386,18 +386,40 @@ public sealed class BackupController : ControllerBase
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(100L * 1024L * 1024L * 1024L)]
     public async Task<ActionResult<CommandResultResponse>> UploadPbmSnapshotBundleAsync(
-        [FromForm] UploadPbmSnapshotBundleRequest request,
         CancellationToken cancellationToken)
     {
-        if (request.File.Length == 0)
+        IFormCollection form =
+            await Request.ReadFormAsync(cancellationToken);
+
+        IFormFile? file =
+            form.Files.GetFile("File");
+
+        string backupName =
+            form["BackupName"].ToString();
+
+        if (file is null)
+        {
+            return BadRequest("The multipart form field 'File' is missing.");
+        }
+
+        if (file.Length == 0)
         {
             return BadRequest("The uploaded PBM bundle is empty.");
         }
 
-        if (IsInvalidPbmBackupName(request.BackupName))
+        if (IsInvalidPbmBackupName(backupName))
         {
-            return BadRequest("Invalid PBM backup name.");
+            return BadRequest(
+                $"Invalid PBM backup name: '{backupName}'.");
         }
+
+        HttpContext.RequestServices
+            .GetRequiredService<ILogger<BackupController>>()
+            .LogInformation(
+                "Importing PBM bundle {FileName} ({Length} bytes) as snapshot {BackupName}.",
+                file.FileName,
+                file.Length,
+                backupName);
 
         await _storage.EnsureContainerExistsAsync(
             _backupOptions.PbmBackupContainer,
@@ -405,7 +427,7 @@ public sealed class BackupController : ControllerBase
 
         int uploadedEntries = 0;
         await using Stream input =
-            request.File.OpenReadStream();
+            file.OpenReadStream();
 
         using var archive =
             new ZipArchive(
@@ -436,13 +458,13 @@ public sealed class BackupController : ControllerBase
             await _storage.UploadAsync(
                 StorageObjectId.Create(
                     _backupOptions.PbmBackupContainer,
-                    $"pbm/{request.BackupName}/{entryName}"),
+                    $"pbm/{backupName}/{entryName}"),
                 entryStream,
                 "application/octet-stream",
                 new Dictionary<string, string>
                 {
                     ["source"] = "user-uploaded-pbm-bundle",
-                    ["original-file-name"] = request.File.FileName
+                    ["original-file-name"] = file.FileName
                 },
                 cancellationToken);
 
@@ -456,7 +478,7 @@ public sealed class BackupController : ControllerBase
         return new CommandResultResponse(
             resyncResult.ExitCode,
             resyncResult.Succeeded,
-            $"Uploaded {uploadedEntries} PBM bundle entries to {_backupOptions.PbmBackupContainer}/pbm/{request.BackupName}.{Environment.NewLine}{resyncResult.StandardOutput}",
+            $"Uploaded {uploadedEntries} PBM bundle entries to {_backupOptions.PbmBackupContainer}/pbm/{backupName}.{Environment.NewLine}{resyncResult.StandardOutput}",
             resyncResult.StandardError);
     }
 
