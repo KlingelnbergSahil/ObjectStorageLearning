@@ -1,0 +1,46 @@
+@using System.Globalization
+
+<MudPaper Class="pa-3 mt-4" Outlined="true">
+    <div class="d-flex align-center mb-2">
+        <MudText Typo="Typo.subtitle1">Timing Log</MudText>
+        <MudSpacer />
+        <MudText Typo="Typo.caption">@Entries.Count action(s)</MudText>
+        <MudButton Class="ml-3" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" OnClick="OnClear" Disabled="Entries.Count == 0">
+            Clear
+        </MudButton>
+    </div>
+    <MudTable Items="Entries" Dense="true" Hover="true" Elevation="0">
+        <HeaderContent>
+            <MudTh>Started</MudTh>
+            <MudTh>Action</MudTh>
+            <MudTh>Duration</MudTh>
+            <MudTh>Result</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd>@context.StartedAt.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture)</MudTd>
+            <MudTd>@context.Action</MudTd>
+            <MudTd>@FormatDuration(context.Duration)</MudTd>
+            <MudTd>
+                <MudChip T="string" Size="Size.Small" Color="@(context.Succeeded ? Color.Success : Color.Error)">
+                    @(context.Succeeded ? "Success" : "Failed")
+                </MudChip>
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText>No timed actions yet.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+</MudPaper>
+
+@code {
+    [Parameter]
+    public IReadOnlyList<TimingEntry> Entries { get; set; } = [];
+
+    [Parameter]
+    public EventCallback OnClear { get; set; }
+
+    private static string FormatDuration(TimeSpan duration) =>
+        duration.TotalMinutes >= 1
+            ? $"{duration.TotalMinutes:0.00} min"
+            : $"{duration.TotalSeconds:0.00} sec";
+}

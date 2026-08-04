@@ -1,0 +1,12 @@
+@if (!string.IsNullOrWhiteSpace(Message))
+{
+    <MudPaper Class="pa-3 mt-4" Outlined="true">
+        <MudText Typo="Typo.subtitle2">Output</MudText>
+        <pre class="command-output">@Message</pre>
+    </MudPaper>
+}
+
+@code {
+    [Parameter]
+    public string? Message { get; set; }
+}

@@ -1,0 +1,74 @@
+name: object-storage-learning
+
+services:
+  seaweed-master:
+    image: chrislusf/seaweedfs:latest
+    container_name: seaweed-master
+    command: >
+      master
+      -ip=seaweed-master
+      -mdir=/data
+      -volumeSizeLimitMB=1024
+    ports:
+      - "9333:9333"
+      - "19333:19333"
+    volumes:
+      - seaweed-master-data:/data
+    restart: unless-stopped
+
+  seaweed-volume:
+    image: chrislusf/seaweedfs:latest
+    container_name: seaweed-volume
+    command: >
+      volume
+      -mserver=seaweed-master:9333
+      -ip=seaweed-volume
+      -port=8080
+      -dir=/data
+      -max=10
+    depends_on:
+      - seaweed-master
+    ports:
+      - "8080:8080"
+      - "18080:18080"
+    volumes:
+      - seaweed-volume-data:/data
+    restart: unless-stopped
+
+  seaweed-filer:
+    image: chrislusf/seaweedfs:latest
+    container_name: seaweed-filer
+    command: >
+      filer
+      -master=seaweed-master:9333
+      -ip=seaweed-filer
+    depends_on:
+      - seaweed-master
+      - seaweed-volume
+    ports:
+      - "8888:8888"
+      - "18888:18888"
+    volumes:
+      - seaweed-filer-data:/data
+    restart: unless-stopped
+
+  seaweed-s3:
+    image: chrislusf/seaweedfs:latest
+    container_name: seaweed-s3
+    command: >
+      s3
+      -filer=seaweed-filer:8888
+      -port=8333
+      -config=/etc/seaweedfs/s3-config.json
+    depends_on:
+      - seaweed-filer
+    ports:
+      - "8333:8333"
+    volumes:
+      - ./s3-config.json:/etc/seaweedfs/s3-config.json:ro
+    restart: unless-stopped
+
+volumes:
+  seaweed-master-data:
+  seaweed-volume-data:
+  seaweed-filer-data:

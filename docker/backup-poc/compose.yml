@@ -1,0 +1,44 @@
+name: object-storage-backup-poc
+
+services:
+  backup-poc-mongo:
+    image: percona/percona-server-mongodb:7.0
+    container_name: backup-poc-mongo
+    command:
+      - mongod
+      - --replSet
+      - rs0
+      - --bind_ip_all
+    ports:
+      - "37017:27017"
+    volumes:
+      - backup-poc-mongo-data:/data/db
+      - backup-poc-mongo-config:/data/configdb
+      - ./scripts:/scripts:ro
+    restart: unless-stopped
+    networks:
+      - storage-learning
+
+  backup-poc-pbm-agent:
+    image: percona/percona-backup-mongodb:2.15.0
+    container_name: backup-poc-pbm-agent
+    command:
+      - pbm-agent
+    environment:
+      PBM_MONGODB_URI: "mongodb://backup-poc-mongo:27017/?replicaSet=rs0"
+    depends_on:
+      - backup-poc-mongo
+    volumes:
+      - ./pbm-storage.yaml:/etc/pbm/pbm-storage.yaml:ro
+    restart: unless-stopped
+    networks:
+      - storage-learning
+
+networks:
+  storage-learning:
+    external: true
+    name: object-storage-learning_default
+
+volumes:
+  backup-poc-mongo-data:
+  backup-poc-mongo-config:

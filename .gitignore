@@ -1,0 +1,34 @@
+# Visual Studio / Rider / VS Code local state
+.vs/
+.idea/
+.vscode/
+
+# Build output
+bin/
+obj/
+out/
+TestResults/
+artifacts/
+
+# .NET local/user files
+*.user
+*.suo
+*.rsuser
+*.userosscache
+*.sln.docstates
+
+# Runtime/local data
+data/
+logs/
+*.log
+
+# Environment and secrets
+.env
+.env.*
+*.Development.local.json
+*.local.json
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -1,0 +1,31 @@
+@inherits LayoutComponentBase
+
+<MudThemeProvider />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="1" Color="Color.Primary" Dense="true">
+        <MudText Typo="Typo.h6">Object Storage Backup POC</MudText>
+        <MudSpacer />
+        <MudLink Href="http://localhost:5213/swagger" Target="_blank" Color="Color.Inherit">Swagger</MudLink>
+    </MudAppBar>
+    <MudDrawer Open="true" Variant="DrawerVariant.Responsive" Elevation="1">
+        <MudDrawerHeader>
+            <MudText Typo="Typo.subtitle1">Backup Lab</MudText>
+        </MudDrawerHeader>
+        <NavMenu />
+    </MudDrawer>
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+<div id="blazor-error-ui">
+    An unhandled error has occurred.
+    <a href="" class="reload">Reload</a>
+    <a class="dismiss">🗙</a>
+</div>

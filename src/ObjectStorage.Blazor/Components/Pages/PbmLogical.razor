@@ -1,0 +1,350 @@
+@page "/pbm-logical"
+@using System.Text.RegularExpressions
+@inject BackupApiClient Api
+@inject TimingLogStore TimingStore
+@inject ISnackbar Snackbar
+@inject IJSRuntime Js
+
+<PageTitle>PBM Logical</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Percona PBM Logical</MudText>
+
+<MudTabs Rounded="true" Border="true">
+    <MudTabPanel Text="Backup">
+        <MudPaper Class="pa-4 mt-4" Outlined="true">
+            <MudText Typo="Typo.h6">Backup</MudText>
+            <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary" OnClick="BackupAsync" Disabled="_busy">
+                Start Logical Backup
+            </MudButton>
+            <MudButton Class="mt-3 ml-2" Variant="Variant.Outlined" OnClick="StatusAsync" Disabled="_busy">
+                Status
+            </MudButton>
+            <MudButton Class="mt-3 ml-2" Variant="Variant.Outlined" OnClick="LoadSnapshotsAsync" Disabled="_busy">
+                Refresh Snapshots
+            </MudButton>
+            @if (_busy)
+            {
+                <MudProgressLinear Class="mt-4" Indeterminate="true" Color="Color.Primary" />
+            }
+            <MudText Typo="Typo.subtitle2" Class="mt-4">Completed PBM Snapshots</MudText>
+            <PbmSnapshotsTable Snapshots="_snapshots" OnSelect="SelectSnapshot" OnDownload="DownloadSnapshotAsync" />
+        </MudPaper>
+    </MudTabPanel>
+    <MudTabPanel Text="Restore">
+        <MudPaper Class="pa-4 mt-4" Outlined="true">
+            <MudText Typo="Typo.h6">Restore</MudText>
+            <MudTextField @bind-Value="_backupName" Label="PBM Snapshot Name" Placeholder="Select from table or paste name" Margin="Margin.Dense" />
+            <MudCheckBox @bind-Value="_dropExistingBeforeRestore" Label="Drop database before restore" />
+            <MudTextField @bind-Value="_databaseNameToDrop" Label="Database To Drop" Margin="Margin.Dense" Disabled="!_dropExistingBeforeRestore" />
+            <MudButton Class="mt-2" Variant="Variant.Outlined" OnClick="LoadSnapshotsAsync" Disabled="_busy">
+                Refresh Snapshots
+            </MudButton>
+            <MudButton Class="mt-2 ml-2" Variant="Variant.Filled" Color="Color.Error" OnClick="RestoreAsync" Disabled="_busy || string.IsNullOrWhiteSpace(_backupName)">
+                Restore Selected Snapshot
+            </MudButton>
+            <div class="mt-4">
+                <PbmSnapshotsTable Snapshots="_snapshots" OnSelect="SelectSnapshot" OnDownload="DownloadSnapshotAsync" />
+            </div>
+        </MudPaper>
+    </MudTabPanel>
+</MudTabs>
+
+<CommandOutput Message="_output" />
+<TimingLog Entries="_timings" OnClear="ClearTimingsAsync" />
+
+@code {
+    private const BackupStrategy Strategy = BackupStrategy.PbmLogical;
+    private bool _busy;
+    private string? _backupName;
+    private bool _dropExistingBeforeRestore;
+    private string _databaseNameToDrop = "R300";
+    private string? _output;
+    private IReadOnlyList<PbmSnapshot> _snapshots = [];
+    private readonly List<TimingEntry> _timings = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _timings.Clear();
+        _timings.AddRange(await TimingStore.ListAsync());
+        await LoadSnapshotsAsync();
+    }
+
+    private async Task StatusAsync() =>
+        await RunAsync("PBM logical status", async () =>
+        {
+            var status = await Api.GetPbmStatusAsync();
+            var logs = await Api.GetPbmLogsAsync();
+            _output = CombineSections(("Status", Format(status)), ("Agent logs", Format(logs)));
+        });
+
+    private async Task LoadSnapshotsAsync()
+    {
+        var status = await Api.GetPbmStatusAsync();
+        var list = await Api.GetPbmListAsync();
+        _snapshots = ParseSnapshots(status?.StandardOutput);
+        _output = CombineSections(("Status", Format(status)), ("PBM list", Format(list)));
+    }
+
+    private async Task BackupAsync()
+    {
+        DateTimeOffset startedAt = DateTimeOffset.UtcNow;
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        bool succeeded = false;
+
+        try
+        {
+            _busy = true;
+            _output = "Submitting PBM logical backup...";
+            await InvokeAsync(StateHasChanged);
+
+            var submit = await Api.CreatePbmBackupAsync(Strategy);
+            string? backupName = TryFindBackupName(submit?.StandardOutput);
+            _output = CombineSections(("Submit", Format(submit)));
+            await InvokeAsync(StateHasChanged);
+
+            for (int attempt = 0; attempt < 720; attempt++)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(5));
+
+                var status = await Api.GetPbmStatusAsync();
+                backupName ??= TryFindBackupName(status?.StandardOutput);
+                var list = await Api.GetPbmListAsync();
+                var logs = await Api.GetPbmLogsAsync();
+                _snapshots = ParseSnapshots(status?.StandardOutput);
+
+                _output =
+                    CombineSections(
+                        ("Submit", Format(submit)),
+                        ("Status", Format(status)),
+                        ("Completed snapshots", Format(list)),
+                        ("Agent logs", Format(logs)));
+
+                await InvokeAsync(StateHasChanged);
+
+                if (IsCompleted(backupName, status?.StandardOutput, list?.StandardOutput))
+                {
+                    succeeded = true;
+                    Snackbar.Add("PBM logical backup completed", Severity.Success);
+                    return;
+                }
+
+                if (IsCurrentBackupFailed(backupName, status?.StandardOutput, logs?.StandardOutput))
+                {
+                    throw new InvalidOperationException("PBM reported a backup failure. Check Status and Agent logs in Output.");
+                }
+            }
+
+            throw new TimeoutException("PBM backup did not finish within 60 minutes.");
+        }
+        catch (Exception exception)
+        {
+            _output = $"{_output}{Environment.NewLine}{Environment.NewLine}{exception.Message}";
+            Snackbar.Add("Operation failed", Severity.Error);
+        }
+        finally
+        {
+            stopwatch.Stop();
+            await AddTimingAsync(startedAt, "PBM logical backup", stopwatch.Elapsed, succeeded);
+            _output = $"{_output}{Environment.NewLine}{Environment.NewLine}Duration: {FormatDuration(stopwatch.Elapsed)}";
+            _busy = false;
+        }
+    }
+
+    private async Task RestoreAsync() =>
+        await RunAsync("PBM logical restore", async () =>
+        {
+            var restore = await Api.RestorePbmAsync(
+                _backupName!,
+                _dropExistingBeforeRestore,
+                _databaseNameToDrop);
+            var status = await Api.GetPbmStatusAsync();
+            var logs = await Api.GetPbmLogsAsync();
+            _output = CombineSections(("Restore submit", Format(restore)), ("Status", Format(status)), ("Agent logs", Format(logs)));
+        });
+
+    private Task SelectSnapshot(string backupName)
+    {
+        _backupName = backupName;
+        return Task.CompletedTask;
+    }
+
+    private async Task DownloadSnapshotAsync(string backupName) =>
+        await RunAsync($"Download PBM bundle {backupName}", async () =>
+        {
+            Uri uri = Api.CreatePbmSnapshotDownloadUri(backupName);
+            await Js.InvokeVoidAsync("backupPoc.openUrl", uri.ToString());
+            _output = $"Started PBM bundle download for {backupName}. Browser download time is shown by the browser; this action only times URL creation/open.";
+        });
+
+    private async Task RunAsync(string actionName, Func<Task> action)
+    {
+        DateTimeOffset startedAt = DateTimeOffset.UtcNow;
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        bool succeeded = false;
+
+        try
+        {
+            _busy = true;
+            _output = null;
+            await action();
+            succeeded = true;
+            Snackbar.Add("Done", Severity.Success);
+        }
+        catch (Exception exception)
+        {
+            _output = exception.Message;
+            Snackbar.Add("Operation failed", Severity.Error);
+        }
+        finally
+        {
+            stopwatch.Stop();
+            await AddTimingAsync(startedAt, actionName, stopwatch.Elapsed, succeeded);
+            _output = $"{_output}{Environment.NewLine}{Environment.NewLine}Duration: {FormatDuration(stopwatch.Elapsed)}";
+            _busy = false;
+        }
+    }
+
+    private async Task AddTimingAsync(DateTimeOffset startedAt, string actionName, TimeSpan duration, bool succeeded)
+    {
+        var timing = new TimingEntry(startedAt, actionName, duration, succeeded);
+        await TimingStore.AddAsync(timing);
+        _timings.Insert(0, timing);
+    }
+
+    private async Task ClearTimingsAsync()
+    {
+        await TimingStore.ClearAsync();
+        _timings.Clear();
+    }
+
+    private static string Format(CommandResultResponse? result)
+    {
+        if (result is null)
+        {
+            return "No response.";
+        }
+
+        var stdout = string.IsNullOrWhiteSpace(result.StandardOutput) ? "(no stdout)" : result.StandardOutput;
+        var stderr = string.IsNullOrWhiteSpace(result.StandardError) ? "(no stderr)" : result.StandardError;
+        return $"Exit: {result.ExitCode}  Success: {result.Succeeded}{Environment.NewLine}{Environment.NewLine}STDOUT:{Environment.NewLine}{stdout}{Environment.NewLine}{Environment.NewLine}STDERR:{Environment.NewLine}{stderr}";
+    }
+
+    private static string CombineSections(params (string Title, string Body)[] sections) =>
+        string.Join(
+            $"{Environment.NewLine}{Environment.NewLine}",
+            sections.Select(section => $"{section.Title}:{Environment.NewLine}{section.Body}"));
+
+    private static IReadOnlyList<PbmSnapshot> ParseSnapshots(string? output)
+    {
+        if (string.IsNullOrWhiteSpace(output))
+        {
+            return [];
+        }
+
+        return output
+            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
+            .Where(line => line.Contains(" done", StringComparison.OrdinalIgnoreCase))
+            .Select(line => Regex.Match(line, @"^\s*(?<name>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)\s+(?<size>\S+)\s+(?<type>\S+).*\s(?<status>done)\s*$", RegexOptions.IgnoreCase))
+            .Where(match => match.Success)
+            .Select(match => new PbmSnapshot(
+                match.Groups["name"].Value,
+                match.Groups["size"].Value,
+                match.Groups["type"].Value,
+                match.Groups["status"].Value))
+            .ToList();
+    }
+
+    private static string? TryFindBackupName(string? output)
+    {
+        if (string.IsNullOrWhiteSpace(output))
+        {
+            return null;
+        }
+
+        Match match = Regex.Match(output, "Snapshot backup \"(?<name>[^\"]+)\"");
+        return match.Success ? match.Groups["name"].Value : null;
+    }
+
+    private static bool IsCompleted(string? backupName, string? statusOutput, string? listOutput)
+    {
+        if (string.IsNullOrWhiteSpace(backupName))
+        {
+            return !ContainsRunning(statusOutput);
+        }
+
+        bool completedInStatus =
+            ParseSnapshots(statusOutput)
+                .Any(snapshot => string.Equals(snapshot.Name, backupName, StringComparison.OrdinalIgnoreCase));
+
+        return !ContainsRunning(statusOutput) &&
+            (completedInStatus || listOutput?.Contains(backupName, StringComparison.OrdinalIgnoreCase) == true);
+    }
+
+    private static bool ContainsRunning(string? output)
+    {
+        if (string.IsNullOrWhiteSpace(output))
+        {
+            return false;
+        }
+
+        string[] lines = output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        for (int index = 0; index < lines.Length; index++)
+        {
+            if (!lines[index].StartsWith("Currently running", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            for (int sectionIndex = index + 1; sectionIndex < lines.Length; sectionIndex++)
+            {
+                string line = lines[sectionIndex];
+                if (line.All(character => character == '=') || line.All(character => character == '-'))
+                {
+                    continue;
+                }
+
+                if (line.Equals("(none)", StringComparison.OrdinalIgnoreCase))
+                {
+                    return false;
+                }
+
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ContainsFailure(string? output) =>
+        output?.Contains("failed", StringComparison.OrdinalIgnoreCase) == true ||
+        output?.Contains("error", StringComparison.OrdinalIgnoreCase) == true;
+
+    private static bool IsCurrentBackupFailed(string? backupName, string? statusOutput, string? logsOutput)
+    {
+        if (string.IsNullOrWhiteSpace(backupName))
+        {
+            return false;
+        }
+
+        bool failedInStatus =
+            statusOutput?
+                .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
+                .Any(line =>
+                    line.Contains(backupName, StringComparison.OrdinalIgnoreCase) &&
+                    ContainsFailure(line)) == true;
+
+        bool failedInLogs =
+            logsOutput?
+                .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
+                .Any(line =>
+                    line.Contains($"[backup/{backupName}]", StringComparison.OrdinalIgnoreCase) &&
+                    ContainsFailure(line)) == true;
+
+        return failedInStatus || failedInLogs;
+    }
+
+    private static string FormatDuration(TimeSpan duration) =>
+        duration.TotalMinutes >= 1
+            ? $"{duration.TotalMinutes:0.00} min"
+            : $"{duration.TotalSeconds:0.00} sec";
+}

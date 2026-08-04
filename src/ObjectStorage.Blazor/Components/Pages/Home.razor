@@ -1,0 +1,321 @@
+@page "/"
+@inject BackupApiClient Api
+@inject TimingLogStore TimingStore
+@inject IJSRuntime Js
+@inject ISnackbar Snackbar
+
+<PageTitle>Mongodump Flow</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Mongodump Backup, Upload, Download, Restore</MudText>
+
+<MudTabs Rounded="true" Border="true">
+    <MudTabPanel Text="Backup">
+        <MudGrid Class="mt-4">
+            <MudItem xs="12" lg="5">
+                <MudPaper Class="pa-4" Outlined="true">
+                    <MudText Typo="Typo.h6">Source Database</MudText>
+                    <MudTextField @bind-Value="_sourceContainer" Label="Mongo Container" Margin="Margin.Dense" />
+                    <MudTextField @bind-Value="_databaseName" Label="Database" Margin="Margin.Dense" />
+                    <MudButton Class="mt-2" Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadDatabasesAsync" Disabled="_busy">
+                        Load Databases
+                    </MudButton>
+                    <MudButton Class="mt-2 ml-2" Variant="Variant.Outlined" OnClick="ReadSizeAsync" Disabled="_busy">
+                        Read Size
+                    </MudButton>
+                    @if (_size is not null)
+                    {
+                        <MudAlert Severity="Severity.Info" Class="mt-3">
+                            @_size.DatabaseName: @FormatBytes(_size.StorageSizeBytes), selected @_size.SelectedStrategy
+                        </MudAlert>
+                    }
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" lg="7">
+                <MudPaper Class="pa-4" Outlined="true">
+                    <MudText Typo="Typo.h6">Backup</MudText>
+                    <MudTextField @bind-Value="_storageContainer" Label="Storage Container" Margin="Margin.Dense" />
+                    <MudTextField @bind-Value="_storageKey" Label="Storage Key" Placeholder="Leave empty for automatic key" Margin="Margin.Dense" />
+                    <MudButton Class="mt-2" Variant="Variant.Filled" Color="Color.Primary" OnClick="RunBackupAsync" Disabled="_busy">
+                        Backup To SeaweedFS
+                    </MudButton>
+                    @if (_busy)
+                    {
+                        <MudProgressLinear Class="mt-4" Indeterminate="true" Color="Color.Primary" />
+                    }
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12">
+                <MudPaper Class="pa-4" Outlined="true">
+                    <div class="d-flex align-center mb-3">
+                        <MudText Typo="Typo.h6">Existing Mongodump Files</MudText>
+                        <MudSpacer />
+                        <MudButton Variant="Variant.Outlined" OnClick="LoadRecordsAsync" Disabled="_busy">Refresh</MudButton>
+                    </div>
+                    <BackupRecordsTable Records="_mongodumpRecords" OnDownload="DownloadAsync" OnRestore="RestoreAsync" />
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    </MudTabPanel>
+
+    <MudTabPanel Text="Restore">
+        <MudGrid Class="mt-4">
+            <MudItem xs="12" lg="5">
+                <MudPaper Class="pa-4" Outlined="true">
+                    <MudText Typo="Typo.h6">Upload Existing Archive</MudText>
+                    <MudTextField @bind-Value="_uploadDatabaseName" Label="Database Name In Backup" Margin="Margin.Dense" />
+                    <MudTextField @bind-Value="_uploadStorageKey" Label="Storage Key" Margin="Margin.Dense" />
+                    <MudCheckBox @bind-Value="_uploadCompressed" Label="File is .archive.gz" />
+                    <InputFile id="backupFileInput" OnChange="OnFileSelected" />
+                    <MudButton Class="mt-3" Variant="Variant.Filled" Color="Color.Primary" OnClick="UploadAndRegisterAsync" Disabled="_busy">
+                        Upload And Register
+                    </MudButton>
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12" lg="7">
+                <MudPaper Class="pa-4" Outlined="true">
+                    <MudText Typo="Typo.h6">Restore Options</MudText>
+                    <MudCheckBox @bind-Value="_dropExisting" Label="Drop existing data before restore" />
+                    <MudTextField @bind-Value="_targetContainer" Label="Target Container" Margin="Margin.Dense" />
+                    <MudTextField @bind-Value="_restoreSourceDb" Label="Source DB Name" Placeholder="Optional" Margin="Margin.Dense" />
+                    <MudTextField @bind-Value="_restoreTargetDb" Label="Target DB Name" Placeholder="Optional" Margin="Margin.Dense" />
+                </MudPaper>
+            </MudItem>
+
+            <MudItem xs="12">
+                <MudPaper Class="pa-4" Outlined="true">
+                    <div class="d-flex align-center mb-3">
+                        <MudText Typo="Typo.h6">Choose Existing Or Uploaded File</MudText>
+                        <MudSpacer />
+                        <MudButton Variant="Variant.Outlined" OnClick="LoadRecordsAsync" Disabled="_busy">Refresh</MudButton>
+                    </div>
+                    <BackupRecordsTable Records="_mongodumpRecords" OnDownload="DownloadAsync" OnRestore="RestoreAsync" />
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    </MudTabPanel>
+</MudTabs>
+
+<CommandOutput Message="_output" />
+<TimingLog Entries="_timings" OnClear="ClearTimingsAsync" />
+
+@code {
+    private bool _busy;
+    private string _sourceContainer = "backup-poc-mongo";
+    private string _databaseName = "learning_poc";
+    private string _targetContainer = "backup-poc-mongo";
+    private string _storageContainer = "ge-backups";
+    private string? _storageKey;
+    private string _uploadDatabaseName = "poc_large";
+    private string _uploadStorageKey = "manual-upload/imported.archive";
+    private bool _uploadCompressed;
+    private string? _selectedFileName;
+    private bool _dropExisting = true;
+    private string? _restoreSourceDb;
+    private string? _restoreTargetDb;
+    private string? _output;
+    private DatabaseSizeInfo? _size;
+    private IReadOnlyList<BackupRecord> _records = [];
+    private readonly List<TimingEntry> _timings = [];
+
+    private IReadOnlyList<BackupRecord> _mongodumpRecords =>
+        _records
+            .Where(record => record.Strategy == BackupStrategy.Mongodump)
+            .ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _timings.Clear();
+        _timings.AddRange(await TimingStore.ListAsync());
+        await LoadRecordsAsync();
+    }
+
+    private async Task LoadDatabasesAsync()
+    {
+        await RunAsync("Load databases", async () =>
+        {
+            var databases = await Api.GetDatabasesAsync(_sourceContainer);
+            _output = string.Join(Environment.NewLine, databases.Select(item => $"{item.Name} {FormatBytes(item.SizeOnDiskBytes)}"));
+        });
+    }
+
+    private async Task ReadSizeAsync()
+    {
+        await RunAsync("Read database size", async () =>
+        {
+            _size = await Api.GetDatabaseSizeAsync(_sourceContainer, _databaseName);
+            _output = _size is null ? "No size information returned." : $"{_size.DatabaseName}: {FormatBytes(_size.StorageSizeBytes)} -> {_size.SelectedStrategy}";
+        });
+    }
+
+    private async Task RunBackupAsync()
+    {
+        await RunAsync("Mongodump backup to SeaweedFS", async () =>
+        {
+            var result = await Api.CreateMongodumpBackupAsync(
+                new CreateMongodumpBackupRequest(
+                    _sourceContainer,
+                    _databaseName,
+                    null,
+                    _storageContainer,
+                    string.IsNullOrWhiteSpace(_storageKey) ? null : _storageKey,
+                    BackupStrategy.Mongodump));
+
+            _storageKey = result?.StorageKey;
+            _output = $"Backup completed: {result?.StorageKey}";
+            await LoadRecordsAsync();
+        });
+    }
+
+    private void OnFileSelected(InputFileChangeEventArgs args)
+    {
+        _selectedFileName = args.File.Name;
+        if (string.IsNullOrWhiteSpace(_uploadStorageKey))
+        {
+            _uploadStorageKey = $"manual-upload/{_selectedFileName}";
+        }
+    }
+
+    private async Task UploadAndRegisterAsync()
+    {
+        await RunAsync("Upload and register archive", async () =>
+        {
+            string contentType = _uploadCompressed ? "application/gzip" : "application/octet-stream";
+            var url = await Api.CreateUploadUrlAsync(
+                new CreateBackupUploadUrlRequest(
+                    _storageContainer,
+                    _uploadStorageKey,
+                    contentType));
+
+            if (url is null)
+            {
+                throw new InvalidOperationException("Upload URL was not returned.");
+            }
+
+            await Js.InvokeAsync<object>(
+                "backupPoc.uploadFileToUrl",
+                "backupFileInput",
+                url.Url.ToString(),
+                contentType);
+
+            await Api.RegisterUploadedBackupAsync(
+                new RegisterUploadedBackupRequest(
+                    _uploadDatabaseName,
+                    _storageContainer,
+                    _uploadStorageKey,
+                    _uploadCompressed,
+                    _selectedFileName));
+
+            _output = $"Uploaded and registered {_uploadStorageKey}";
+            await LoadRecordsAsync();
+        });
+    }
+
+    private async Task DownloadAsync(BackupRecord record)
+    {
+        await RunAsync($"Download {record.StorageKey}", async () =>
+        {
+            var url = await Api.CreateDownloadUrlAsync(
+                new CreateBackupDownloadUrlRequest(
+                    record.StorageContainer,
+                    record.StorageKey,
+                    record.OriginalFileName ?? record.StorageKey.Split('/').Last()));
+
+            if (url is not null)
+            {
+                await Js.InvokeVoidAsync("backupPoc.openUrl", url.Url.ToString());
+            }
+        });
+    }
+
+    private async Task RestoreAsync(BackupRecord record)
+    {
+        await RunAsync($"Restore {record.StorageKey}", async () =>
+        {
+            _output = await Api.RestoreRecordAsync(
+                record.Id,
+                new RestoreBackupRecordRequest(
+                    _targetContainer,
+                    null,
+                    string.IsNullOrWhiteSpace(_restoreSourceDb) ? null : _restoreSourceDb,
+                    string.IsNullOrWhiteSpace(_restoreTargetDb) ? null : _restoreTargetDb,
+                    record.IsCompressed,
+                    _dropExisting));
+        });
+    }
+
+    private async Task LoadRecordsAsync()
+    {
+        _records = await Api.GetRecordsAsync();
+    }
+
+    private async Task ClearTimingsAsync()
+    {
+        await TimingStore.ClearAsync();
+        _timings.Clear();
+    }
+
+    private async Task RunAsync(string actionName, Func<Task> action)
+    {
+        DateTimeOffset startedAt =
+            DateTimeOffset.UtcNow;
+
+        var stopwatch =
+            System.Diagnostics.Stopwatch.StartNew();
+
+        bool succeeded = false;
+
+        try
+        {
+            _busy = true;
+            _output = null;
+            await action();
+            succeeded = true;
+            Snackbar.Add("Done", Severity.Success);
+        }
+        catch (Exception exception)
+        {
+            _output = exception.Message;
+            Snackbar.Add("Operation failed", Severity.Error);
+        }
+        finally
+        {
+            stopwatch.Stop();
+            var timing =
+                new TimingEntry(
+                    startedAt,
+                    actionName,
+                    stopwatch.Elapsed,
+                    succeeded);
+
+            await TimingStore.AddAsync(timing);
+            _timings.Insert(0, timing);
+
+            _output =
+                $"{_output}{Environment.NewLine}{Environment.NewLine}Duration: {FormatDuration(stopwatch.Elapsed)}";
+
+            _busy = false;
+        }
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        string[] units = ["B", "KB", "MB", "GB", "TB"];
+        double value = bytes;
+        int unit = 0;
+        while (value >= 1024 && unit < units.Length - 1)
+        {
+            value /= 1024;
+            unit++;
+        }
+
+        return $"{value:0.##} {units[unit]}";
+    }
+
+    private static string FormatDuration(TimeSpan duration) =>
+        duration.TotalMinutes >= 1
+            ? $"{duration.TotalMinutes:0.00} min"
+            : $"{duration.TotalSeconds:0.00} sec";
+}

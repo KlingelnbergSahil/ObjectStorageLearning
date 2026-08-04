@@ -1,0 +1,36 @@
+html,
+body {
+    font-family: "Segoe UI", system-ui, sans-serif;
+    background: #f5f7f9;
+}
+
+a {
+    text-decoration: none;
+}
+
+.command-output {
+    margin: 10px 0 0;
+    white-space: pre-wrap;
+    overflow: auto;
+    max-height: 420px;
+    font-size: 12px;
+}
+
+#blazor-error-ui {
+    background: #b42318;
+    bottom: 0;
+    color: #fff;
+    display: none;
+    left: 0;
+    padding: .6rem 1.25rem;
+    position: fixed;
+    width: 100%;
+    z-index: 1000;
+}
+
+#blazor-error-ui .dismiss {
+    cursor: pointer;
+    position: absolute;
+    right: .75rem;
+    top: .5rem;
+}

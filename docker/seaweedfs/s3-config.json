@@ -1,0 +1,20 @@
+{
+  "identities": [
+    {
+      "name": "gearengine-learning",
+      "credentials": [
+        {
+          "accessKey": "gearengine-access-key",
+          "secretKey": "gearengine-secret-key-change-me"
+        }
+      ],
+      "actions": [
+        "Admin",
+        "Read",
+        "Write",
+        "List",
+        "Tagging"
+      ]
+    }
+  ]
+}

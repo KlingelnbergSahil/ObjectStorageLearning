@@ -1,0 +1,13 @@
+.git
+.vs
+.agents
+.codex
+**/bin
+**/obj
+data
+*.user
+*.suo
+*.tmp
+*.bak
+*.zip
+*.gz

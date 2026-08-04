@@ -1,0 +1,9 @@
+<Solution>
+  <Project Path="src/ObjectStorage.Api/ObjectStorage.Api.csproj" />
+  <Project Path="src/ObjectStorage.AzureBlob/ObjectStorage.AzureBlob.csproj" />
+  <Project Path="src/ObjectStorage.Backup/ObjectStorage.Backup.csproj" />
+  <Project Path="src/ObjectStorage.Blazor/ObjectStorage.Blazor.csproj" />
+  <Project Path="src/ObjectStorage.Core/ObjectStorage.Core.csproj" Id="c4ef37dd-5972-4fc2-bc33-3a36277610e6" />
+  <Project Path="src/ObjectStorage.S3/ObjectStorage.S3.csproj" />
+  <Project Path="tests/ObjectStorage.IntegrationTests/ObjectStorage.IntegrationTests.csproj" Id="3d1f4f8f-2136-4b31-a35e-4f25f8d0a46f" />
+</Solution>

@@ -1,0 +1,19 @@
+FROM mcr.microsoft.com/dotnet/sdk:8.0
+
+# The API uses Docker for this learning POC to run mongodump, mongorestore,
+# and PBM commands against the lab containers.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends docker.io ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace
+
+ENV ASPNETCORE_ENVIRONMENT=Development
+ENV ASPNETCORE_URLS=http://+:5213
+ENV DOTNET_USE_POLLING_FILE_WATCHER=false
+ENV DOTNET_WATCH_RESTART_ON_RUDE_EDIT=1
+ENV DOTNET_CLI_HOME=/tmp/dotnet
+
+EXPOSE 5213
+
+CMD ["dotnet", "watch", "--project", "src/ObjectStorage.Api/ObjectStorage.Api.csproj", "run", "--no-launch-profile", "--urls", "http://0.0.0.0:5213"]

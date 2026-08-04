@@ -1,0 +1,10 @@
+storage:
+  type: s3
+  s3:
+    region: us-east-1
+    bucket: ge-pbm-backups
+    prefix: pbm
+    endpointUrl: http://seaweed-s3:8333
+    credentials:
+      access-key-id: gearengine-access-key
+      secret-access-key: gearengine-secret-key-change-me

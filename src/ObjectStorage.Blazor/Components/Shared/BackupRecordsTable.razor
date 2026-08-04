@@ -1,0 +1,66 @@
+@using System.Globalization
+
+<MudTable Items="Records" Dense="true" Hover="true" Elevation="0" Bordered="true">
+    <HeaderContent>
+        <MudTh>Created</MudTh>
+        <MudTh>DB</MudTh>
+        <MudTh>Strategy</MudTh>
+        <MudTh>Status</MudTh>
+        <MudTh>Storage Key</MudTh>
+        <MudTh>Source</MudTh>
+        <MudTh>Format</MudTh>
+        <MudTh>Actions</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Created">@context.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)</MudTd>
+        <MudTd DataLabel="DB">@context.DatabaseName</MudTd>
+        <MudTd DataLabel="Strategy">@context.Strategy</MudTd>
+        <MudTd DataLabel="Status">
+            <MudChip T="string" Size="Size.Small" Color="@StatusColor(context.Status)">@context.Status</MudChip>
+        </MudTd>
+        <MudTd DataLabel="Storage Key">
+            <MudText Typo="Typo.body2">@context.StorageContainer</MudText>
+            <MudText Typo="Typo.caption">@context.StorageKey</MudText>
+        </MudTd>
+        <MudTd DataLabel="Source">
+            @if (context.IsUserUploaded)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Info">Uploaded</MudChip>
+            }
+            else
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Secondary">Backup</MudChip>
+            }
+        </MudTd>
+        <MudTd DataLabel="Format">@(context.IsCompressed ? "archive.gz" : "archive")</MudTd>
+        <MudTd DataLabel="Actions">
+            <MudButtonGroup Size="Size.Small" Variant="Variant.Outlined">
+                <MudButton OnClick="() => OnDownload.InvokeAsync(context)">Download</MudButton>
+                <MudButton Color="Color.Error" OnClick="() => OnRestore.InvokeAsync(context)">Restore</MudButton>
+            </MudButtonGroup>
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText>No backup records yet.</MudText>
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    [Parameter]
+    public IReadOnlyList<BackupRecord> Records { get; set; } = [];
+
+    [Parameter]
+    public EventCallback<BackupRecord> OnDownload { get; set; }
+
+    [Parameter]
+    public EventCallback<BackupRecord> OnRestore { get; set; }
+
+    private static Color StatusColor(BackupStatus status) =>
+        status switch
+        {
+            BackupStatus.Completed => Color.Success,
+            BackupStatus.Failed => Color.Error,
+            BackupStatus.Running => Color.Warning,
+            _ => Color.Default
+        };
+}

@@ -1,0 +1,170 @@
+name: object-storage-learning
+
+services:
+  seaweed-s3:
+    image: chrislusf/seaweedfs:latest
+    container_name: seaweed-s3
+    command: >
+      server
+      -dir=/data
+      -filer
+      -s3
+      -s3.port=8333
+      -s3.port.iceberg=0
+      -master.volumeSizeLimitMB=1024
+      -volume.max=80
+    environment:
+      AWS_ACCESS_KEY_ID: gearengine-access-key
+      AWS_SECRET_ACCESS_KEY: gearengine-secret-key-change-me
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=kl-network"
+      - "traefik.http.routers.object-storage-s3.entrypoints=web"
+      - "traefik.http.routers.object-storage-s3.rule=Host(`${ObjectStorage_S3_Host:-object-storage-s3.localhost}`)"
+      - "traefik.http.routers.object-storage-s3-secure.entrypoints=websecure"
+      - "traefik.http.routers.object-storage-s3-secure.tls=true"
+      - "traefik.http.routers.object-storage-s3-secure.rule=Host(`${ObjectStorage_S3_Host:-object-storage-s3.localhost}`)"
+      - "traefik.http.services.object-storage-s3.loadbalancer.server.port=8333"
+    ports:
+      - "8333:8333"
+    networks:
+      default:
+      r300-network:
+    volumes:
+      - seaweed-data:/data
+    restart: unless-stopped
+
+  backup-poc-mongo:
+    image: percona/percona-server-mongodb:7.0
+    container_name: backup-poc-mongo
+    command:
+      - mongod
+      - --replSet
+      - rs0
+      - --bind_ip_all
+    ports:
+      - "37017:27017"
+    networks:
+      default:
+      r300-network:
+    volumes:
+      - backup-poc-mongo-data:/data/db
+      - backup-poc-mongo-config:/data/configdb
+      - ./docker/backup-poc/scripts:/scripts:ro
+    restart: unless-stopped
+
+  backup-poc-pbm-agent:
+    image: percona/percona-backup-mongodb:2.15.0
+    container_name: backup-poc-pbm-agent
+    command:
+      - pbm-agent
+    environment:
+      PBM_MONGODB_URI: "mongodb://backup-poc-mongo:27017/?replicaSet=rs0"
+    depends_on:
+      - backup-poc-mongo
+    volumes:
+      - ./docker/backup-poc/pbm-storage.yaml:/etc/pbm/pbm-storage.yaml:ro
+    restart: unless-stopped
+
+  object-storage-api:
+    build:
+      context: .
+      dockerfile: docker/api/Dockerfile.dev
+    image: object-storage-learning-api:dev
+    container_name: object-storage-api
+    depends_on:
+      - seaweed-s3
+      - backup-poc-mongo
+      - backup-poc-pbm-agent
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:5213
+      ObjectStorage__Provider: S3
+      ObjectStorage__DefaultContainer: ge-backups
+      ObjectStorage__S3__ServiceUrl: http://seaweed-s3:8333
+      ObjectStorage__S3__PublicServiceUrl: http://${ObjectStorage_S3_Host:-object-storage-s3.localhost}
+      ObjectStorage__S3__AccessKey: gearengine-access-key
+      ObjectStorage__S3__SecretKey: gearengine-secret-key-change-me
+      ObjectStorage__S3__Region: us-east-1
+      ObjectStorage__S3__ForcePathStyle: "true"
+      ObjectStorage__S3__UseHttp: "true"
+      Backup__DefaultBackupContainer: ge-backups
+      Backup__PbmBackupContainer: ge-pbm-backups
+      Backup__SmallDatabaseThresholdGb: "20"
+      Backup__MediumDatabaseThresholdGb: "100"
+      Backup__CommandTimeoutMinutes: "120"
+      Backup__CatalogPath: /data/backups/catalog.json
+      Backup__Docker__SourceMongoContainerName: backup-poc-mongo
+      Backup__Docker__LabMongoContainerName: backup-poc-mongo
+      Backup__Docker__PbmAgentContainerName: backup-poc-pbm-agent
+      Backup__Docker__LabMongoUriInsideContainer: mongodb://localhost:27017/?replicaSet=rs0
+      Backup__Docker__SourceMongoUriInsideContainer: mongodb://localhost:27017/?replicaSet=rs0
+      Backup__Docker__PbmStorageConfigPath: /etc/pbm/pbm-storage.yaml
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=kl-network"
+      - "traefik.http.routers.object-storage-api.entrypoints=web"
+      - "traefik.http.routers.object-storage-api.rule=Host(`${ObjectStorage_Api_Host:-object-storage-api.localhost}`)"
+      - "traefik.http.routers.object-storage-api-secure.entrypoints=websecure"
+      - "traefik.http.routers.object-storage-api-secure.tls=true"
+      - "traefik.http.routers.object-storage-api-secure.rule=Host(`${ObjectStorage_Api_Host:-object-storage-api.localhost}`)"
+      - "traefik.http.services.object-storage-api.loadbalancer.server.port=5213"
+    ports:
+      - "5213:5213"
+    networks:
+      default:
+      r300-network:
+    volumes:
+      - .:/workspace
+      - /var/run/docker.sock:/var/run/docker.sock
+      - backup-catalog:/data/backups
+      - api-nuget-cache:/root/.nuget/packages
+    restart: unless-stopped
+
+  object-storage-blazor:
+    build:
+      context: .
+      dockerfile: docker/blazor/Dockerfile.dev
+    image: object-storage-learning-blazor:dev
+    container_name: object-storage-blazor
+    depends_on:
+      - object-storage-api
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:5214
+      BackupApi__BaseUrl: http://object-storage-api:5213
+      BackupApi__PublicBaseUrl: http://${ObjectStorage_Api_Host:-object-storage-api.localhost}
+      TimingLog__Path: /data/timings/timing-log.json
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=kl-network"
+      - "traefik.http.routers.object-storage-blazor.entrypoints=web"
+      - "traefik.http.routers.object-storage-blazor.rule=Host(`${ObjectStorage_Blazor_Host:-object-storage.localhost}`)"
+      - "traefik.http.routers.object-storage-blazor-secure.entrypoints=websecure"
+      - "traefik.http.routers.object-storage-blazor-secure.tls=true"
+      - "traefik.http.routers.object-storage-blazor-secure.rule=Host(`${ObjectStorage_Blazor_Host:-object-storage.localhost}`)"
+      - "traefik.http.services.object-storage-blazor.loadbalancer.server.port=5214"
+    ports:
+      - "5214:5214"
+    networks:
+      default:
+      r300-network:
+    volumes:
+      - .:/workspace
+      - blazor-timing-data:/data/timings
+      - blazor-nuget-cache:/root/.nuget/packages
+    restart: unless-stopped
+
+volumes:
+  seaweed-data:
+  backup-poc-mongo-data:
+  backup-poc-mongo-config:
+  backup-catalog:
+  api-nuget-cache:
+  blazor-nuget-cache:
+  blazor-timing-data:
+
+networks:
+  r300-network:
+    external: true
+    name: kl-network

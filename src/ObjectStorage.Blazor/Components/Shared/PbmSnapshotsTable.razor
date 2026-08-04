@@ -1,0 +1,35 @@
+<MudTable Items="Snapshots" Dense="true" Hover="true" Elevation="0" Bordered="true">
+    <HeaderContent>
+        <MudTh>Name</MudTh>
+        <MudTh>Size</MudTh>
+        <MudTh>Type</MudTh>
+        <MudTh>Status</MudTh>
+        <MudTh>Actions</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Name">@context.Name</MudTd>
+        <MudTd DataLabel="Size">@context.Size</MudTd>
+        <MudTd DataLabel="Type">@context.Type</MudTd>
+        <MudTd DataLabel="Status">@context.Status</MudTd>
+        <MudTd DataLabel="Actions">
+            <MudButtonGroup Size="Size.Small" Variant="Variant.Outlined">
+                <MudButton OnClick="() => OnSelect.InvokeAsync(context.Name)">Select</MudButton>
+                <MudButton OnClick="() => OnDownload.InvokeAsync(context.Name)">Download Bundle</MudButton>
+            </MudButtonGroup>
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText>No completed PBM snapshots yet. Running snapshots appear in Status first.</MudText>
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    [Parameter]
+    public IReadOnlyList<PbmSnapshot> Snapshots { get; set; } = [];
+
+    [Parameter]
+    public EventCallback<string> OnSelect { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnDownload { get; set; }
+}

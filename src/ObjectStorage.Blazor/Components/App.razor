@@ -1,0 +1,46 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/" />
+    <link rel="stylesheet" href="bootstrap/bootstrap.min.css" />
+    <link rel="stylesheet" href="_content/MudBlazor/MudBlazor.min.css" />
+    <link rel="stylesheet" href="app.css" />
+    <link rel="stylesheet" href="ObjectStorage.Blazor.styles.css" />
+    <link rel="icon" type="image/png" href="favicon.png" />
+    <HeadOutlet @rendermode="InteractiveServer" />
+</head>
+
+<body>
+    <Routes @rendermode="InteractiveServer" />
+    <script src="_framework/blazor.web.js"></script>
+    <script src="_content/MudBlazor/MudBlazor.min.js"></script>
+    <script>
+        window.backupPoc = {
+            uploadFileToUrl: async (inputId, url, contentType) => {
+                const input = document.getElementById(inputId);
+                if (!input || !input.files || input.files.length === 0) {
+                    throw new Error('Choose a backup file first.');
+                }
+
+                const file = input.files[0];
+                const response = await fetch(url, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': contentType },
+                    body: file
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Upload failed with HTTP ${response.status}`);
+                }
+
+                return { fileName: file.name, size: file.size };
+            },
+            openUrl: url => window.open(url, '_blank', 'noopener,noreferrer')
+        };
+    </script>
+</body>
+
+</html>

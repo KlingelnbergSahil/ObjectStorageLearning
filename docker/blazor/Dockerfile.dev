@@ -1,0 +1,13 @@
+FROM mcr.microsoft.com/dotnet/sdk:8.0
+
+WORKDIR /workspace
+
+ENV ASPNETCORE_ENVIRONMENT=Development
+ENV ASPNETCORE_URLS=http://+:5214
+ENV DOTNET_USE_POLLING_FILE_WATCHER=false
+ENV DOTNET_WATCH_RESTART_ON_RUDE_EDIT=1
+ENV DOTNET_CLI_HOME=/tmp/dotnet
+
+EXPOSE 5214
+
+CMD ["dotnet", "watch", "--project", "src/ObjectStorage.Blazor/ObjectStorage.Blazor.csproj", "run", "--no-launch-profile", "--urls", "http://0.0.0.0:5214"]
