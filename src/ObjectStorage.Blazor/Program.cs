@@ -2,6 +2,7 @@ using ObjectStorage.Blazor.Components;
 using ObjectStorage.Blazor.Services;
 using MudBlazor.Services;
 using Microsoft.AspNetCore.Components.Server.Circuits;
+using Microsoft.AspNetCore.DataProtection;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,6 +16,17 @@ builder.Services.AddRazorComponents()
 
 builder.Services.AddMudServices();
 builder.Services.AddSingleton<TimingLogStore>();
+
+string? dataProtectionKeysPath =
+    builder.Configuration["DataProtection:KeysPath"];
+
+if (!string.IsNullOrWhiteSpace(dataProtectionKeysPath))
+{
+    builder.Services
+        .AddDataProtection()
+        .PersistKeysToFileSystem(
+            new DirectoryInfo(dataProtectionKeysPath));
+}
 
 builder.Services.AddHttpClient<BackupApiClient>(client =>
 {

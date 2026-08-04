@@ -128,6 +128,7 @@ services:
       BackupApi__BaseUrl: http://object-storage-api:5213
       BackupApi__PublicBaseUrl: ${ObjectStorage_Api_PublicBaseUrl:-/web/object-storage-api}
       TimingLog__Path: /data/timings/timing-log.json
+      DataProtection__KeysPath: /data/dataprotection
       PathBase: ${ObjectStorage_Blazor_PathPrefix:-/web/object-storage}
     labels:
       - "traefik.enable=true"
@@ -148,6 +149,7 @@ services:
     volumes:
       - .:/workspace
       - blazor-timing-data:/data/timings
+      - blazor-data-protection:/data/dataprotection
       - blazor-nuget-cache:/root/.nuget/packages
     restart: unless-stopped
 
@@ -159,6 +161,7 @@ volumes:
   api-nuget-cache:
   blazor-nuget-cache:
   blazor-timing-data:
+  blazor-data-protection:
 
 networks:
   r300-network:
