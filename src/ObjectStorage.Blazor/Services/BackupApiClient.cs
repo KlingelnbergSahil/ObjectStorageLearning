@@ -8,7 +8,7 @@ namespace ObjectStorage.Blazor.Services;
 public sealed class BackupApiClient
 {
     private readonly HttpClient _httpClient;
-    private readonly Uri _publicBaseAddress;
+    private readonly string _publicBaseAddress;
     private readonly JsonSerializerOptions _jsonOptions =
         new(JsonSerializerDefaults.Web)
         {
@@ -211,30 +211,34 @@ public sealed class BackupApiClient
         string backupName)
     {
         return new Uri(
-            _publicBaseAddress,
-            $"api/backup/pbm/snapshots/{Uri.EscapeDataString(backupName)}/download");
+            CreatePublicUrl(
+                $"api/backup/pbm/snapshots/{Uri.EscapeDataString(backupName)}/download"),
+            UriKind.RelativeOrAbsolute);
     }
 
     public Uri CreatePbmSnapshotBundleUploadUri()
     {
         return new Uri(
-            _publicBaseAddress,
-            "api/backup/pbm/snapshots/upload-bundle");
+            CreatePublicUrl(
+                "api/backup/pbm/snapshots/upload-bundle"),
+            UriKind.RelativeOrAbsolute);
     }
 
     public Uri CreateRecordDownloadUri(
         string recordId)
     {
         return new Uri(
-            _publicBaseAddress,
-            $"api/backup/records/{Uri.EscapeDataString(recordId)}/download");
+            CreatePublicUrl(
+                $"api/backup/records/{Uri.EscapeDataString(recordId)}/download"),
+            UriKind.RelativeOrAbsolute);
     }
 
     public Uri CreateServerUploadUri()
     {
         return new Uri(
-            _publicBaseAddress,
-            "api/storage/server-upload");
+            CreatePublicUrl(
+                "api/storage/server-upload"),
+            UriKind.RelativeOrAbsolute);
     }
 
     private static async Task<string> ReadCommandBodyAsync(
@@ -267,7 +271,24 @@ public sealed class BackupApiClient
             body);
     }
 
-    private static Uri NormalizeBaseAddress(
+    private string CreatePublicUrl(
+        string relativePath)
+    {
+        if (Uri.TryCreate(
+                _publicBaseAddress,
+                UriKind.Absolute,
+                out Uri? absoluteBaseAddress))
+        {
+            return new Uri(
+                    absoluteBaseAddress,
+                    relativePath.TrimStart('/'))
+                .ToString();
+        }
+
+        return $"{_publicBaseAddress}{relativePath.TrimStart('/')}";
+    }
+
+    private static string NormalizeBaseAddress(
         string value)
     {
         string trimmed =
@@ -278,6 +299,6 @@ public sealed class BackupApiClient
             trimmed += "/";
         }
 
-        return new Uri(trimmed);
+        return trimmed;
     }
 }

@@ -20,7 +20,6 @@ services:
       - "8333:8333"
     networks:
       default:
-      r300-network:
     volumes:
       - seaweed-data:/data
     restart: unless-stopped
@@ -127,7 +126,7 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:5214
       BackupApi__BaseUrl: http://object-storage-api:5213
-      BackupApi__PublicBaseUrl: ${ObjectStorage_Public_Origin:-http://localhost}${ObjectStorage_Api_PathPrefix:-/web/object-storage-api}
+      BackupApi__PublicBaseUrl: ${ObjectStorage_Api_PublicBaseUrl:-/web/object-storage-api}
       TimingLog__Path: /data/timings/timing-log.json
       PathBase: ${ObjectStorage_Blazor_PathPrefix:-/web/object-storage}
     labels:
