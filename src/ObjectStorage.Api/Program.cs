@@ -5,7 +5,25 @@ using ObjectStorage.AzureBlob.DependencyInjection;
 using ObjectStorage.Backup.DependencyInjection;
 using ObjectStorage.S3.DependencyInjection;
 
+const long MaxUploadSizeBytes =
+    100L * 1024L * 1024L * 1024L;
+
 var builder = WebApplication.CreateBuilder(args);
+
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize =
+        MaxUploadSizeBytes;
+
+    options.Limits.KeepAliveTimeout =
+        TimeSpan.FromMinutes(180);
+
+    options.Limits.RequestHeadersTimeout =
+        TimeSpan.FromMinutes(5);
+
+    options.Limits.MinRequestBodyDataRate = null;
+    options.Limits.MinResponseDataRate = null;
+});
 
 builder.Services
     .AddControllers()
@@ -20,7 +38,7 @@ builder.Services.AddSwaggerGen();
 builder.Services.Configure<FormOptions>(options =>
 {
     options.MultipartBodyLengthLimit =
-        100L * 1024L * 1024L * 1024L;
+        MaxUploadSizeBytes;
 });
 
 builder.Services.AddBackupManagement(
@@ -81,6 +99,46 @@ if (app.Environment.IsDevelopment())
 
     app.UseCors("DevelopmentCors");
 }
+
+app.Use(
+    async (context, next) =>
+    {
+        bool isPbmBundleUpload =
+            context.Request.Path.Value?.Contains(
+                "/api/backup/pbm/snapshots/upload-bundle",
+                StringComparison.OrdinalIgnoreCase) == true;
+
+        if (!isPbmBundleUpload)
+        {
+            await next();
+            return;
+        }
+
+        ILogger logger =
+            context.RequestServices
+                .GetRequiredService<ILoggerFactory>()
+                .CreateLogger("Upload");
+
+        logger.LogInformation(
+            "PBM bundle upload started. ContentLength={ContentLength}",
+            context.Request.ContentLength);
+
+        try
+        {
+            await next();
+
+            logger.LogInformation(
+                "PBM bundle upload finished. StatusCode={StatusCode}",
+                context.Response.StatusCode);
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(
+                exception,
+                "PBM bundle upload failed while reading or processing the request.");
+            throw;
+        }
+    });
 
 app.UseStaticFiles();
 
