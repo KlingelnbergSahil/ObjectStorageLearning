@@ -43,6 +43,10 @@
             <MudButton Class="mt-2" Variant="Variant.Filled" Color="Color.Primary" OnClick="UploadBundleAsync" Disabled="_busy || string.IsNullOrWhiteSpace(_uploadBundleBackupName)">
                 Upload Bundle And Resync
             </MudButton>
+            @if (_busy && _uploadProgressPercent.HasValue)
+            {
+                <MudProgressLinear Class="mt-4" Value="_uploadProgressPercent.Value" Color="Color.Primary" />
+            }
 
             <MudDivider Class="my-4" />
             <MudTextField @bind-Value="_backupName" Label="PBM Snapshot Name" Placeholder="Select from table or paste name" Margin="Margin.Dense" />
@@ -71,6 +75,7 @@
     private string? _backupName;
     private string? _uploadBundleBackupName;
     private string? _selectedBundleFileName;
+    private double? _uploadProgressPercent;
     private bool _dropExistingBeforeRestore;
     private string _databaseNameToDrop = "R300";
     private string? _output;
@@ -186,18 +191,41 @@
     private async Task UploadBundleAsync() =>
         await RunAsync("Upload PBM physical bundle", async () =>
         {
+            _uploadProgressPercent = 0;
+            _output = "Starting PBM bundle upload...";
+            await InvokeAsync(StateHasChanged);
+
+            using var dotNetReference =
+                DotNetObjectReference.Create(this);
+
             string uploadOutput =
                 await Js.InvokeAsync<string>(
                     "backupPoc.uploadPbmBundleToApi",
                     BundleInputId,
                     Api.CreatePbmSnapshotBundleUploadUrl(),
-                    _uploadBundleBackupName);
+                    _uploadBundleBackupName,
+                    dotNetReference);
 
+            _output = "Upload completed. Running PBM resync and refreshing snapshots...";
+            await InvokeAsync(StateHasChanged);
             await LoadSnapshotsAsync();
             _backupName = _uploadBundleBackupName;
             _output =
                 $"{uploadOutput}{Environment.NewLine}{Environment.NewLine}{_output}";
         });
+
+    [JSInvokable]
+    public async Task OnUploadProgressAsync(
+        double percent,
+        long loadedBytes,
+        long totalBytes,
+        string message)
+    {
+        _uploadProgressPercent = Math.Clamp(percent, 0, 100);
+        _output =
+            $"{message}{Environment.NewLine}Uploaded bytes: {loadedBytes:N0} / {totalBytes:N0}";
+        await InvokeAsync(StateHasChanged);
+    }
 
     private Task SelectSnapshot(string backupName)
     {
@@ -238,6 +266,7 @@
             stopwatch.Stop();
             await AddTimingAsync(startedAt, actionName, stopwatch.Elapsed, succeeded);
             _output = $"{_output}{Environment.NewLine}{Environment.NewLine}Duration: {FormatDuration(stopwatch.Elapsed)}";
+            _uploadProgressPercent = null;
             _busy = false;
         }
     }
