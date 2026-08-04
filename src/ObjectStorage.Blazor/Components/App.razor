@@ -20,6 +20,22 @@
     <script src="_framework/blazor.web.js"></script>
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>
     <script>
+        const normalizeBackupPocUrl = url => {
+            if (!url) {
+                return url;
+            }
+
+            if (url.startsWith('file:///')) {
+                return `${window.location.origin}${url.substring('file://'.length)}`;
+            }
+
+            if (url.startsWith('/')) {
+                return `${window.location.origin}${url}`;
+            }
+
+            return url;
+        };
+
         window.backupPoc = {
             uploadFileToUrl: async (inputId, url, contentType) => {
                 const input = document.getElementById(inputId);
@@ -28,7 +44,10 @@
                 }
 
                 const file = input.files[0];
-                const response = await fetch(url, {
+                const uploadUrl = normalizeBackupPocUrl(url);
+                console.info('Backup POC upload URL:', uploadUrl);
+
+                const response = await fetch(uploadUrl, {
                     method: 'PUT',
                     headers: { 'Content-Type': contentType },
                     body: file
@@ -52,7 +71,10 @@
                 formData.append('Container', container);
                 formData.append('ObjectKey', objectKey);
 
-                const response = await fetch(url, {
+                const uploadUrl = normalizeBackupPocUrl(url);
+                console.info('Backup POC upload URL:', uploadUrl);
+
+                const response = await fetch(uploadUrl, {
                     method: 'POST',
                     body: formData
                 });
@@ -74,7 +96,10 @@
                 formData.append('File', file, file.name);
                 formData.append('BackupName', backupName);
 
-                const response = await fetch(url, {
+                const uploadUrl = normalizeBackupPocUrl(url);
+                console.info('Backup POC upload URL:', uploadUrl);
+
+                const response = await fetch(uploadUrl, {
                     method: 'POST',
                     body: formData
                 });
@@ -86,7 +111,7 @@
 
                 return body;
             },
-            openUrl: url => window.open(url, '_blank', 'noopener,noreferrer')
+            openUrl: url => window.open(normalizeBackupPocUrl(url), '_blank', 'noopener,noreferrer')
         };
     </script>
 </body>
