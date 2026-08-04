@@ -1,10 +1,12 @@
-﻿<!DOCTYPE html>
+﻿@inject IConfiguration Configuration
+
+<!DOCTYPE html>
 <html lang="en">
 
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <base href="/" />
+    <base href="@BaseHref" />
     <link rel="stylesheet" href="bootstrap/bootstrap.min.css" />
     <link rel="stylesheet" href="_content/MudBlazor/MudBlazor.min.css" />
     <link rel="stylesheet" href="app.css" />
@@ -38,9 +40,51 @@
 
                 return { fileName: file.name, size: file.size };
             },
+            uploadFileToApi: async (inputId, url, container, objectKey) => {
+                const input = document.getElementById(inputId);
+                if (!input || !input.files || input.files.length === 0) {
+                    throw new Error('Choose a backup file first.');
+                }
+
+                const file = input.files[0];
+                const formData = new FormData();
+                formData.append('File', file, file.name);
+                formData.append('Container', container);
+                formData.append('ObjectKey', objectKey);
+
+                const response = await fetch(url, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Upload failed with HTTP ${response.status}`);
+                }
+
+                return { fileName: file.name, size: file.size };
+            },
             openUrl: url => window.open(url, '_blank', 'noopener,noreferrer')
         };
     </script>
 </body>
 
 </html>
+
+@code {
+    private string BaseHref
+    {
+        get
+        {
+            string? pathBase =
+                Configuration["PathBase"];
+
+            if (string.IsNullOrWhiteSpace(pathBase) ||
+                pathBase == "/")
+            {
+                return "/";
+            }
+
+            return pathBase.TrimEnd('/') + "/";
+        }
+    }
+}

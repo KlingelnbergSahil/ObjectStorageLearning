@@ -182,23 +182,12 @@
     {
         await RunAsync("Upload and register archive", async () =>
         {
-            string contentType = _uploadCompressed ? "application/gzip" : "application/octet-stream";
-            var url = await Api.CreateUploadUrlAsync(
-                new CreateBackupUploadUrlRequest(
-                    _storageContainer,
-                    _uploadStorageKey,
-                    contentType));
-
-            if (url is null)
-            {
-                throw new InvalidOperationException("Upload URL was not returned.");
-            }
-
             await Js.InvokeAsync<object>(
-                "backupPoc.uploadFileToUrl",
+                "backupPoc.uploadFileToApi",
                 "backupFileInput",
-                url.Url.ToString(),
-                contentType);
+                Api.CreateServerUploadUri().ToString(),
+                _storageContainer,
+                _uploadStorageKey);
 
             await Api.RegisterUploadedBackupAsync(
                 new RegisterUploadedBackupRequest(
@@ -217,16 +206,9 @@
     {
         await RunAsync($"Download {record.StorageKey}", async () =>
         {
-            var url = await Api.CreateDownloadUrlAsync(
-                new CreateBackupDownloadUrlRequest(
-                    record.StorageContainer,
-                    record.StorageKey,
-                    record.OriginalFileName ?? record.StorageKey.Split('/').Last()));
-
-            if (url is not null)
-            {
-                await Js.InvokeVoidAsync("backupPoc.openUrl", url.Url.ToString());
-            }
+            await Js.InvokeVoidAsync(
+                "backupPoc.openUrl",
+                Api.CreateRecordDownloadUri(record.Id).ToString());
         });
     }
 

@@ -31,7 +31,7 @@ public sealed class StorageController : ControllerBase
 
     [HttpPost("server-upload")]
     [Consumes("multipart/form-data")]
-    [RequestSizeLimit(1024L * 1024L * 1024L)]
+    [RequestSizeLimit(100L * 1024L * 1024L * 1024L)]
     public async Task<IActionResult> ServerUploadAsync(
         [FromForm] ServerUploadRequest request,
         CancellationToken cancellationToken)

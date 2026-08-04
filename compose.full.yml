@@ -16,15 +16,6 @@ services:
     environment:
       AWS_ACCESS_KEY_ID: gearengine-access-key
       AWS_SECRET_ACCESS_KEY: gearengine-secret-key-change-me
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=kl-network"
-      - "traefik.http.routers.object-storage-s3.entrypoints=web"
-      - "traefik.http.routers.object-storage-s3.rule=Host(`${ObjectStorage_S3_Host:-object-storage-s3.localhost}`)"
-      - "traefik.http.routers.object-storage-s3-secure.entrypoints=websecure"
-      - "traefik.http.routers.object-storage-s3-secure.tls=true"
-      - "traefik.http.routers.object-storage-s3-secure.rule=Host(`${ObjectStorage_S3_Host:-object-storage-s3.localhost}`)"
-      - "traefik.http.services.object-storage-s3.loadbalancer.server.port=8333"
     ports:
       - "8333:8333"
     networks:
@@ -82,7 +73,7 @@ services:
       ObjectStorage__Provider: S3
       ObjectStorage__DefaultContainer: ge-backups
       ObjectStorage__S3__ServiceUrl: http://seaweed-s3:8333
-      ObjectStorage__S3__PublicServiceUrl: http://${ObjectStorage_S3_Host:-object-storage-s3.localhost}
+      ObjectStorage__S3__PublicServiceUrl: http://localhost:8333
       ObjectStorage__S3__AccessKey: gearengine-access-key
       ObjectStorage__S3__SecretKey: gearengine-secret-key-change-me
       ObjectStorage__S3__Region: us-east-1
@@ -100,14 +91,17 @@ services:
       Backup__Docker__LabMongoUriInsideContainer: mongodb://localhost:27017/?replicaSet=rs0
       Backup__Docker__SourceMongoUriInsideContainer: mongodb://localhost:27017/?replicaSet=rs0
       Backup__Docker__PbmStorageConfigPath: /etc/pbm/pbm-storage.yaml
+      PathBase: ${ObjectStorage_Api_PathPrefix:-/web/gear-engine-api}
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=kl-network"
       - "traefik.http.routers.object-storage-api.entrypoints=web"
-      - "traefik.http.routers.object-storage-api.rule=Host(`${ObjectStorage_Api_Host:-object-storage-api.localhost}`)"
+      - "traefik.http.routers.object-storage-api.rule=PathPrefix(`${ObjectStorage_Api_PathPrefix:-/web/gear-engine-api}`)"
+      - "traefik.http.routers.object-storage-api.priority=100"
       - "traefik.http.routers.object-storage-api-secure.entrypoints=websecure"
       - "traefik.http.routers.object-storage-api-secure.tls=true"
-      - "traefik.http.routers.object-storage-api-secure.rule=Host(`${ObjectStorage_Api_Host:-object-storage-api.localhost}`)"
+      - "traefik.http.routers.object-storage-api-secure.rule=PathPrefix(`${ObjectStorage_Api_PathPrefix:-/web/gear-engine-api}`)"
+      - "traefik.http.routers.object-storage-api-secure.priority=100"
       - "traefik.http.services.object-storage-api.loadbalancer.server.port=5213"
     ports:
       - "5213:5213"
@@ -133,16 +127,19 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:5214
       BackupApi__BaseUrl: http://object-storage-api:5213
-      BackupApi__PublicBaseUrl: http://${ObjectStorage_Api_Host:-object-storage-api.localhost}
+      BackupApi__PublicBaseUrl: ${ObjectStorage_Public_Origin:-http://localhost}${ObjectStorage_Api_PathPrefix:-/web/gear-engine-api}
       TimingLog__Path: /data/timings/timing-log.json
+      PathBase: ${ObjectStorage_Blazor_PathPrefix:-/web/gear-engine}
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=kl-network"
       - "traefik.http.routers.object-storage-blazor.entrypoints=web"
-      - "traefik.http.routers.object-storage-blazor.rule=Host(`${ObjectStorage_Blazor_Host:-object-storage.localhost}`)"
+      - "traefik.http.routers.object-storage-blazor.rule=PathPrefix(`${ObjectStorage_Blazor_PathPrefix:-/web/gear-engine}`)"
+      - "traefik.http.routers.object-storage-blazor.priority=50"
       - "traefik.http.routers.object-storage-blazor-secure.entrypoints=websecure"
       - "traefik.http.routers.object-storage-blazor-secure.tls=true"
-      - "traefik.http.routers.object-storage-blazor-secure.rule=Host(`${ObjectStorage_Blazor_Host:-object-storage.localhost}`)"
+      - "traefik.http.routers.object-storage-blazor-secure.rule=PathPrefix(`${ObjectStorage_Blazor_PathPrefix:-/web/gear-engine}`)"
+      - "traefik.http.routers.object-storage-blazor-secure.priority=50"
       - "traefik.http.services.object-storage-blazor.loadbalancer.server.port=5214"
     ports:
       - "5214:5214"

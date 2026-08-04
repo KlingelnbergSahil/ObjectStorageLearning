@@ -26,6 +26,15 @@ builder.Services.AddHttpClient<BackupApiClient>(client =>
 
 var app = builder.Build();
 
+string? pathBase =
+    builder.Configuration["PathBase"];
+
+if (!string.IsNullOrWhiteSpace(pathBase) &&
+    pathBase != "/")
+{
+    app.UsePathBase(pathBase.TrimEnd('/'));
+}
+
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {

@@ -153,6 +153,39 @@ public sealed class BackupController : ControllerBase
             });
     }
 
+    [HttpGet("records/{recordId}/download")]
+    public async Task<IActionResult> DownloadRecordAsync(
+        string recordId,
+        CancellationToken cancellationToken)
+    {
+        BackupRecord? record =
+            await _catalog.GetAsync(
+                recordId,
+                cancellationToken);
+
+        if (record is null)
+        {
+            return NotFound();
+        }
+
+        string fileName =
+            record.OriginalFileName ??
+            Path.GetFileName(record.StorageKey);
+
+        Response.ContentType = "application/octet-stream";
+        Response.Headers[HeaderNames.ContentDisposition] =
+            $"attachment; filename=\"{SanitizeFileName(fileName)}\"";
+
+        await _storage.DownloadToAsync(
+            StorageObjectId.Create(
+                record.StorageContainer,
+                record.StorageKey),
+            Response.Body,
+            cancellationToken);
+
+        return new EmptyResult();
+    }
+
     [HttpPost("mongodump")]
     public async Task<ActionResult<BackupRecord>> CreateMongodumpBackupAsync(
         [FromBody] CreateMongodumpBackupRequest request,
@@ -381,5 +414,16 @@ public sealed class BackupController : ControllerBase
         }
 
         return TimeSpan.FromMinutes(expiryMinutes);
+    }
+
+    private static string SanitizeFileName(string fileName)
+    {
+        return string.Concat(
+            fileName.Where(
+                character =>
+                    !Path.GetInvalidFileNameChars().Contains(character) &&
+                    character != '"' &&
+                    character != '\r' &&
+                    character != '\n'));
     }
 }

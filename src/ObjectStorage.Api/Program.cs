@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Http.Features;
 using ObjectStorage.Core.Abstractions;
 using ObjectStorage.AzureBlob.DependencyInjection;
 using ObjectStorage.Backup.DependencyInjection;
@@ -16,6 +17,11 @@ builder.Services
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.Configure<FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit =
+        100L * 1024L * 1024L * 1024L;
+});
 
 builder.Services.AddBackupManagement(
     builder.Configuration);
@@ -58,6 +64,15 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+string? pathBase =
+    builder.Configuration["PathBase"];
+
+if (!string.IsNullOrWhiteSpace(pathBase) &&
+    pathBase != "/")
+{
+    app.UsePathBase(pathBase.TrimEnd('/'));
+}
 
 if (app.Environment.IsDevelopment())
 {

@@ -24,7 +24,7 @@ public sealed class BackupApiClient
     {
         _httpClient = httpClient;
         _publicBaseAddress =
-            new Uri(
+            NormalizeBaseAddress(
                 configuration["BackupApi:PublicBaseUrl"]
                 ?? httpClient.BaseAddress?.ToString()
                 ?? "http://localhost:5213");
@@ -215,6 +215,21 @@ public sealed class BackupApiClient
             $"api/backup/pbm/snapshots/{Uri.EscapeDataString(backupName)}/download");
     }
 
+    public Uri CreateRecordDownloadUri(
+        string recordId)
+    {
+        return new Uri(
+            _publicBaseAddress,
+            $"api/backup/records/{Uri.EscapeDataString(recordId)}/download");
+    }
+
+    public Uri CreateServerUploadUri()
+    {
+        return new Uri(
+            _publicBaseAddress,
+            "api/storage/server-upload");
+    }
+
     private static async Task<string> ReadCommandBodyAsync(
         HttpResponseMessage response)
     {
@@ -243,5 +258,19 @@ public sealed class BackupApiClient
 
         throw new InvalidOperationException(
             body);
+    }
+
+    private static Uri NormalizeBaseAddress(
+        string value)
+    {
+        string trimmed =
+            value.Trim();
+
+        if (!trimmed.EndsWith('/'))
+        {
+            trimmed += "/";
+        }
+
+        return new Uri(trimmed);
     }
 }
