@@ -22,6 +22,8 @@ services:
       default:
     volumes:
       - seaweed-data:/data
+    labels:
+      - "traefik.enable=false"
     restart: unless-stopped
 
   backup-poc-mongo:
@@ -41,6 +43,8 @@ services:
       - backup-poc-mongo-data:/data/db
       - backup-poc-mongo-config:/data/configdb
       - ./docker/backup-poc/scripts:/scripts:ro
+    labels:
+      - "traefik.enable=false"
     restart: unless-stopped
 
   backup-poc-pbm-agent:
@@ -54,6 +58,8 @@ services:
       - backup-poc-mongo
     volumes:
       - ./docker/backup-poc/pbm-storage.yaml:/etc/pbm/pbm-storage.yaml:ro
+    labels:
+      - "traefik.enable=false"
     restart: unless-stopped
 
   object-storage-api:
@@ -102,10 +108,6 @@ services:
       - "traefik.http.routers.object-storage-api-secure.rule=PathPrefix(`${ObjectStorage_Api_PathPrefix:-/web/object-storage-api}`)"
       - "traefik.http.routers.object-storage-api-secure.priority=100"
       - "traefik.http.services.object-storage-api.loadbalancer.server.port=5213"
-      - "traefik.http.services.object-storage-api.loadbalancer.serversTransport=object-storage-api-long-upload"
-      - "traefik.http.serversTransports.object-storage-api-long-upload.forwardingTimeouts.dialTimeout=30s"
-      - "traefik.http.serversTransports.object-storage-api-long-upload.forwardingTimeouts.responseHeaderTimeout=0s"
-      - "traefik.http.serversTransports.object-storage-api-long-upload.forwardingTimeouts.idleConnTimeout=180m"
     ports:
       - "5213:5213"
     networks:
