@@ -1,12 +1,17 @@
 using ObjectStorage.Blazor.Components;
 using ObjectStorage.Blazor.Services;
 using MudBlazor.Services;
+using Microsoft.AspNetCore.Components.Server.Circuits;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
+    .AddInteractiveServerComponents(options =>
+    {
+        options.JSInteropDefaultCallTimeout =
+            TimeSpan.FromMinutes(180);
+    });
 
 builder.Services.AddMudServices();
 builder.Services.AddSingleton<TimingLogStore>();
